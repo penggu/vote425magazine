@@ -1,5 +1,4 @@
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 import time
 import datetime
 import random
@@ -246,10 +245,10 @@ def browse():
         assert title_text in browser.title
 
         # 2. Register for an account
-        registerButton = browser.find_element_by_xpath(
+        register_button = browser.find_element_by_xpath(
             '//html/body/main/div/div[1]/div/div/section[5]/div/div/div/div/div/section/div/div/div['
             '2]/div/div/div/div/div/a')
-        registerButton.click()
+        register_button.click()
 
         cred = get_credential()
         textbox_user = browser.find_element_by_xpath(
@@ -296,7 +295,8 @@ def browse():
 
         # 5. Cast the vote
         textbox_best_acu = browser.find_element_by_xpath(
-            '//html/body/main/div/div[1]/div/div/section[5]/div/div/div/div/div/div/div/div/div/form/div[1]/div[22]/input')
+            '//html/body/main/div/div[1]/div/div/section[5]/div/div/div/div/div/div/div/div/div/form/div[1]/div['
+            '22]/input')
         button_submit = browser.find_element_by_xpath(
             '//html/body/main/div/div[1]/div/div/section[5]/div/div/div/div/div/div/div/div/div/form/div[2]/button')
         textbox_best_acu.send_keys(random.choice([
