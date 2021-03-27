@@ -81,7 +81,7 @@ def book_single_user_single_slot(user, day, slot):
             reserve_button = browser.find_element_by_id('reserve_1')
             reserve_button.click()
         except Exception as e:
-            debug(e)
+            debug(f'Failed to locate Reserve button. {e}')
 
         # done, we should be able to see the cancel option now
 
@@ -92,7 +92,7 @@ def book_single_user_single_slot(user, day, slot):
 
     except Exception as e:
         info(f'failed to book for {user} on {day} at {slot}')
-        debug(e)
+        debug(f'Exception occurred: {e}')
 
     browser.quit()
     return booked
@@ -100,10 +100,10 @@ def book_single_user_single_slot(user, day, slot):
 
 def book_court(booked=[]):
     all_success = True
-    for username in zen_planner['bookings']['users'].keys():
-        for day in zen_planner['bookings']['time_slots'].keys():
-            slots = zen_planner['bookings']['time_slots'][day]
-            for slot in slots:
+    for day in zen_planner['bookings']['time_slots'].keys():
+        slots = zen_planner['bookings']['time_slots'][day]
+        for slot in slots:
+            for username in zen_planner['bookings']['users'].keys():
                 booking = [username, day, slot]
                 if booking not in booked:
                     info(f'Booking for {username} on {day} at {slot}')
@@ -161,20 +161,20 @@ def seconds_to_duration(seconds):
 def main():
     with open('booked.json', 'r') as log_file:
         booked = json.load(log_file)
-        debug(booked)
+        debug(f'01 booked = {booked}')
 
     success = book_court(booked)
     with open('booked.json', 'w') as log_file:
-        debug(booked)
+        debug(f'02 booked = {booked}')
         json.dump(booked, log_file)
 
     while not success:
         delay = get_delay_in_seconds()
-        debug(f'waiting to try again in {seconds_to_duration(delay)} ')
+        debug(f'waiting to try again in {seconds_to_duration(delay)}\n\n\n')
         time.sleep(delay)
         success = book_court(booked)
         with open('booked.json', 'w') as log_file:
-            debug(booked)
+            debug(f'03 booked = {booked}')
             json.dump(booked, log_file)
 
     return
