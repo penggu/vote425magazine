@@ -1,4 +1,5 @@
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.select import Select
 import time
@@ -35,11 +36,11 @@ def seconds_before_day_time(day, hour):
     Monday = 0, ... Sunday = 6
     """
     now: datetime = datetime.now()
-    today_10am = datetime(now.year, now.month, now.day, hour, 0, 0)
-    delta = today_10am - now
-    # debug(f'now is {now}, {seconds_to_duration(delta.total_seconds())} before today at {hour}:00:00')
-    days = (day - now.weekday()) % 7
-    ans = days * 24 * 60 * 60 + delta.total_seconds()
+    hour_at_today = datetime(now.year, now.month, now.day, hour, 0, 0)
+    delta_hour = hour_at_today - now
+    # debug(f'now is {now}, {seconds_to_duration(delta_hour.total_seconds())} before today at {hour}:00:00')
+    delta_days = (day - now.weekday()) % 7
+    ans = delta_days * 24 * 60 * 60 + delta_hour.total_seconds()
     return ans
 
 
@@ -50,17 +51,17 @@ def get_delay_in_seconds():
     else:
         wait for seconds until half way to Saturday 10am
     """
+    min_delay = 300  # seconds
+
     today = datetime.today()
     weekday = today.weekday()
     current_hour = today.hour
-    if weekday == 5 and current_hour >= 10:
-        delay = 30
-    else:
-        delay = seconds_before_saturday_10am() / 2  # TODO: choose this one during weekend
-        delay = seconds_before_wednesday_4pm() / 2  # TODO: choose this one during weekday
-        print_dbg(f'seconds before next booking = {delay}')
 
-    return max(delay, 30)
+    delay = seconds_before_saturday_10am() / 2  # TODO: choose this one during weekend
+    # delay = seconds_before_wednesday_4pm() / 2  # TODO: choose this one during weekday
+    print_dbg(f'seconds before next booking = {delay}')
+
+    return max(delay, min_delay)  # this will make sure delay is a positive number
 
 
 def seconds_to_duration(seconds):
@@ -80,9 +81,9 @@ def days_before_next(target_day):
     # debug(f'There are {days_before_sunday} days before Sunday')
     days_before_target_day = target_day_number - today
     # TODO: enable the next two lines if we need to skip current week
-    # if days_before_target_day <= days_before_sunday:
-    #     days_before_target_day += 7
-    # debug(f'There are {days_before_target_day} days before next {target_day}')
+    if days_before_target_day <= days_before_sunday:
+        days_before_target_day += 7
+    print_dbg(f'There are {days_before_target_day} days before next {target_day}')
     return days_before_target_day
 
 
@@ -174,6 +175,7 @@ def login():
     browser.implicitly_wait(0.5)
 
     logged_in = False
+    retry_interval = 5 * 60  # seconds
 
     while not logged_in:
         try:
@@ -190,29 +192,42 @@ def login():
             submit_button = browser.find_element_by_xpath('/html/body/div[1]/table/tbody/tr/td[2]/fieldset['
                                                           '1]/div/form/input')
             submit_button.click()
-
-            time.sleep(3)
+            time.sleep(1)
             logged_in = True
 
         except Exception as e:
-            print_err(f'Exception occurred while trying to log in: {e}')
-            time.sleep(300)
+            print_err(f'Exception occurred while trying to log in: {e}Retrying in {retry_interval} seconds')
+            time.sleep(retry_interval)
 
     return browser
 
 
-def is_weekday(day):
-    ans = list(calendar.day_name).index(day) < 5
-    print_dbg(f'{day} is a ' + ('weekday' if ans else 'weekend'))
-    return ans
+# def is_weekday(day):
+#     ans = list(calendar.day_name).index(day) < 5
+#     print_dbg(f'{day} is a ' + ('weekday' if ans else 'weekend'))
+#     return ans
 
 
-def get_slot_number_on_day(day, slot):
-    if is_weekday(day):
-        slot_number = zen_planner['bookings']['slot_numbers']['Weekday'][slot]
-    else:
-        slot_number = zen_planner['bookings']['slot_numbers']['Weekend'][slot]
-    return slot_number
+# def get_slot_number_on_day(day, slot):
+#     if is_weekday(day):
+#         slot_number = zen_planner['bookings']['slot_numbers']['Weekday'][slot]
+#     else:
+#         slot_number = zen_planner['bookings']['slot_numbers']['Weekend'][slot]
+#     return slot_number
+
+
+def get_slot_button_on_day(day, slot, browser):
+    for row_number in range(20):  # scan all possible calendar rows on the day
+        try:  # an exception will occur if a row number does not exist in the calendar
+            slot_button = browser.find_element_by_xpath(f'/html/body/div/table/'
+                                                        f'tbody/tr/td[2]/table[2]/tbody/tr[{row_number}]/td[1]/div')
+        except NoSuchElementException as e:  # we don't care if an row does not exist
+            pass
+        else:
+            if slot_button.text == slot.upper():   # make sure it is the right row by matching the text
+                return slot_button
+    print_dbg(f'{slot} on {day} is not open yet, please wait until it shows up.')
+    return None
 
 
 def book_single_user_single_slot_with_browser(user, day, slot, browser):
@@ -223,39 +238,41 @@ def book_single_user_single_slot_with_browser(user, day, slot, browser):
 
         # forward all the way to the target date in calendar
         days_later = days_before_next(day)
+        # keep clicking the next button ">" until we reach the target date
         for _ in range(days_later):
             next_day_button = browser.find_element_by_xpath('/html/body/div/table/tbody/tr/td[2]/table[1]/tbody/tr/td['
                                                             '1]/div/a[3]/i')
             next_day_button.click()
 
         # click on the time slot
-        slot_number = get_slot_number_on_day(day, slot)
-        slot_button = browser.find_element_by_xpath(f'/html/body/div/table/tbody/tr/td[2]/table[2]/tbody/tr['
-                                                    f'{slot_number}]/td[1]/div')
-
+        slot_button = get_slot_button_on_day(day, slot, browser)
         slot_button.click()
 
         # select family member
         family_member_select_box = Select(browser.find_element_by_id('familyMembers'))
         family_member_select_box.select_by_visible_text(user)
 
+        time.sleep(3)
+
         # book time slot for selected family member
         try:
             reserve_button = browser.find_element_by_id('reserve_1')
             reserve_button.click()
-        except Exception as e:
-            print_dbg(f'Failed to locate Reserve button. {str(e).rstrip()}')
+        except NoSuchElementException as e:
+            print_dbg(f'Reserve button is not available.')
 
         # done, we should be able to see the cancel option now
-
-        cancel_button = browser.find_element_by_xpath('//a[contains(@id, "cancel_")]')  # *[@id="cancel_2"]
-        # cancel_button.click()  # TODO: delete this line
-        success = True
-        print_inf(f'Successfully booked for {user} on {day} at {slot}')
+        try:
+            cancel_button = browser.find_element_by_xpath('//a[contains(@id, "cancel_")]')  # *[@id="cancel_2"]
+            # cancel_button.click()  # TODO: delete this line
+            print_inf(f'Successfully booked for {user} on {day} at {slot}')
+            success = True
+        except NoSuchElementException as e:
+            print_dbg(f'Cancel button is not available.')
+            print_err(f'Failed to book for {user} on {day} at {slot}')
 
     except Exception as e:
-        print_err(f'Failed to book for {user} on {day} at {slot}')
-        print_dbg(f'Exception occurred: {str(e).rstrip()}')
+        print_dbg(f'Unexpected exception occurred: {str(e).rstrip()}')
 
     return success
 
