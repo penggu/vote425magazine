@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from nwb_data import zen_planner
 import calendar
-import json
+import bson
 from colorama import Fore, Style
 
 
@@ -105,7 +105,8 @@ def login():
             email_text_box = browser.find_element_by_id('idUsername')
             email_text_box.send_keys(zen_planner['login']['email'])
             password_text_box = browser.find_element_by_id('idPassword')
-            password_text_box.send_keys(zen_planner['login']['password'])
+            password_bson = bson.BSON.encode({'A': zen_planner['login']['password']})
+            password_text_box.send_keys(bson.BSON(password_bson).decode()['A'])
             submit_button = browser.find_element_by_xpath('/html/body/div[1]/table/tbody/tr/td[2]/fieldset['
                                                           '1]/div/form/input')
             submit_button.click()
@@ -113,7 +114,7 @@ def login():
             logged_in = True
 
         except Exception as e:
-            print_err(f'Exception occurred while trying to log in: {e}Retrying in {retry_interval} seconds')
+            print_err(f'Exception occurred while trying to log in: {e}. Retrying in {retry_interval} seconds')
             time.sleep(retry_interval)
 
     return browser
